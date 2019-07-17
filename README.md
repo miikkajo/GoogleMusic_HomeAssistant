@@ -6,4 +6,5 @@ Stream from your [Google Music library](https://play.google.com/music/listen#/ho
 Robbed from (https://github.com/tprelog/GoogleMusic_HomeAssistant#google-music-in-ha----as-a-media-player)
 
 incredible hack to use Artist / Album browsing on gmusic
+
 no support whatsoever, just make it public if someone find this intresting and want to push it further
