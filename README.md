@@ -7,4 +7,4 @@ Robbed from (https://github.com/tprelog/GoogleMusic_HomeAssistant#google-music-i
 
 incredible hack to use Artist / Album browsing on gmusic
 
-no support whatsoever, just make it public if someone find this intresting and want to push it further
+no support whatsoever, just made it public if someone find this intresting and want to push it further
