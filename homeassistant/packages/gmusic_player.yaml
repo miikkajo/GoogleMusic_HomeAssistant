@@ -33,6 +33,8 @@ media_player:
     media_player: 'gmusic_player_speakers'
     source: 'gmusic_player_source'
     playlist: 'gmusic_player_playlist'
+    artist: 'gmusic_player_artist'
+    album: 'gmusic_player_album'
     station: 'gmusic_player_station'
 
 ## Various input_select REQUIRED by gmusic_player
@@ -52,7 +54,20 @@ input_select:
     options:
     - "Playlist"
     - "Station"
+    - "Catalog"
 
+  gmusic_player_artist:
+    name: Artist
+    icon: mdi:playlist-music
+    options: ## Should be empty
+    - " "    
+
+  gmusic_player_album:
+    name: Album
+    icon: mdi:playlist-music
+    options: ## Should be empty
+    - " "    
+    
   gmusic_player_playlist:
     name: Playlist
     icon: mdi:playlist-music
@@ -127,4 +142,6 @@ group:
     - input_select.gmusic_player_speakers
     - input_select.gmusic_player_source
     - input_select.gmusic_player_playlist
+    - input_select.gmusic_player_artist    
+    - input_select.gmusic_player_album
     - input_select.gmusic_player_station

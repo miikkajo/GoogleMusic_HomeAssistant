@@ -50,6 +50,9 @@ CONF_OAUTH_CRED = 'oauth_cred'
 CONF_SPEAKERS = 'media_player'
 CONF_SOURCE = 'source'
 CONF_PLAYLISTS = 'playlist'
+CONF_ARTISTS = 'artist'
+CONF_ALBUMS = 'album'
+CONF_SONGS = 'song'
 CONF_STATIONS = 'station'
 CONF_SHUFFLE = 'shuffle'
 CONF_SHUFFLE_MODE = 'shuffle_mode'
@@ -62,6 +65,9 @@ DEFAULT_OAUTH_CRED = 'not_set'
 DEFAULT_SPEAKERS = 'not_set'
 DEFAULT_SOURCE = 'not_set'
 DEFAULT_PLAYLISTS = 'not_set'
+DEFAULT_ARTISTS = 'not_set'
+DEFAULT_ALBUMS = 'not_set'
+DEFAULT_SONGS = 'not_set'
 DEFAULT_STATIONS = 'not_set'
 DEFAULT_SHUFFLE = True
 DEFAULT_SHUFFLE_MODE = 1
@@ -77,6 +83,9 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend = vol.Schema({
         vol.Optional(CONF_SPEAKERS, default=DEFAULT_SPEAKERS): cv.string,
         vol.Optional(CONF_SOURCE, default=DEFAULT_SOURCE): cv.string,
         vol.Optional(CONF_PLAYLISTS, default=DEFAULT_PLAYLISTS): cv.string,
+        vol.Optional(CONF_ARTISTS, default=DEFAULT_ARTISTS): cv.string,
+        vol.Optional(CONF_ALBUMS, default=DEFAULT_ALBUMS): cv.string,                
+        vol.Optional(CONF_SONGS, default=DEFAULT_SONGS): cv.string,                
         vol.Optional(CONF_STATIONS, default=DEFAULT_STATIONS): cv.string,
     })
 }, extra=vol.ALLOW_EXTRA)
@@ -113,7 +122,6 @@ class GmusicComponent(MediaPlayerDevice):
                 raise Exception("Legacy login failed! Please check logs for any gmusicapi related WARNING")
 
         self.hass = hass
-        #self._api = GMusic()
         self._api = Mobileclient()
 
         _login_type = config.get(CONF_LOGIN_TYPE, DEFAULT_LOGIN_TYPE)
@@ -152,13 +160,20 @@ class GmusicComponent(MediaPlayerDevice):
 
         self._name = "gmusic_player"
         self._playlist = "input_select." + config.get(CONF_PLAYLISTS, DEFAULT_PLAYLISTS)
+        self._album = "input_select." + config.get(CONF_ALBUMS, DEFAULT_ALBUMS)
+        self._artist = "input_select." + config.get(CONF_ARTISTS, DEFAULT_ARTISTS)
         self._media_player = "input_select." + config.get(CONF_SPEAKERS, DEFAULT_SPEAKERS)
         self._station = "input_select." + config.get(CONF_STATIONS, DEFAULT_STATIONS)
         self._source = "input_select." + config.get(CONF_SOURCE, DEFAULT_SOURCE)
 
         self._entity_ids = []  ## media_players - aka speakers
         self._playlists = []
+        self._artists = []
+        self._albums = []
+        self._songs = []
         self._playlist_to_index = {}
+        self._artist_to_index = {}
+        self._album_to_index = {}
         self._stations = []
         self._station_to_index = {}
         self._tracks = []
@@ -166,9 +181,12 @@ class GmusicComponent(MediaPlayerDevice):
         self._attributes = {}
         self._next_track_no = 0
 
-        hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_playlists)
+  #      hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_playlists)
+#        hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_songs)
+        hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_catalog)
+        #hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_albums)
         hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_stations)
-
+        track_state_change(hass,self._artist, self._update_albums)
         self._shuffle = config.get(CONF_SHUFFLE, DEFAULT_SHUFFLE)
         self._shuffle_mode = config.get(CONF_SHUFFLE_MODE, DEFAULT_SHUFFLE_MODE)
 
@@ -377,6 +395,69 @@ class GmusicComponent(MediaPlayerDevice):
         data = {"options": list(playlists), "entity_id": self._playlist}
         self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SET_OPTIONS, data)
 
+    def _update_songs(self, now=None):
+        """ Sync songs from Google Music library """
+        _LOGGER.error("update_songs")
+        self._songs = self._api.get_all_songs()
+
+    def _update_catalog(self, now=None):
+        """ Sync songs from Google Music library """
+        self._songs = self._api.get_all_songs()
+        self._artist_to_index = {}
+        idx = 0
+        self._artist_to_index["All Artists"] = idx
+        for song in self._songs:
+            if len(song['artist']) < 1:
+                song['artist'] = "unknown"
+            if song['artist'] not in self._artist_to_index.keys():
+              idx = idx + 1
+              self._artist_to_index[song['artist']] = idx
+        
+        artists = list(self._artist_to_index.keys())
+        self._attributes['artists'] = artists
+        data = {"options": list(artists), "entity_id": self._artist}
+        self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SET_OPTIONS, data)
+
+        self._album_to_index = {}
+        _artist_id = self.hass.states.get(self._artist)
+        
+        idx = 0
+#        self._album_to_index["All albums"] = idx
+        for song in self._songs:
+          if len(song['album']) < 1:
+            song['album'] = "unknown"
+          if song['album'] not in self._album_to_index.keys():
+            idx = idx + 1
+            self._album_to_index[song['album']] = idx
+        
+        albums = list(self._album_to_index.keys())
+        self._attributes['albums'] = albums
+        data = {"options": list(albums), "entity_id": self._album}
+        self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SET_OPTIONS, data)
+
+    def _update_albums(self, entity_id=None, old_state=None, new_state=None):
+        _LOGGER.debug("Selected Artist: %s.", new_state.state)
+        if new_state == None:
+           return 
+        self._album_to_index = {}
+        #self._songs = self._api.get_all_songs()
+
+        _artist_id = new_state.state
+        idx = 0
+        self._album_to_index["All albums"] = idx
+        for song in self._songs:
+          if (song['artist'] == _artist_id) or (_artist_id == "All Artists"):
+              if len(song['album']) < 1:
+                song['album'] = "unknown"
+              if song['album'] not in self._album_to_index.keys():
+                idx = idx + 1
+                self._album_to_index[song['album']] = idx
+        
+        albums = list(self._album_to_index.keys())
+        self._attributes['albums'] = albums
+        data = {"options": list(albums), "entity_id": self._album}
+        self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SET_OPTIONS, data)
+
 
     def _update_stations(self, now=None):
         """ Sync stations from Google Music library """
@@ -420,6 +501,35 @@ class GmusicComponent(MediaPlayerDevice):
         self._tracks = self._playlists[idx]['tracks']
         self._total_tracks = len(self._tracks)
         #self.log("Loading [{}] Tracks From: {}".format(len(self._tracks), _playlist_id))
+        if self._shuffle and self._shuffle_mode != 2:
+            random.shuffle(self._tracks)
+        self._play()
+
+    def _load_catalog(self, playlist=None):
+        """ generate tracks to the track_queue """
+        if not self._update_entity_ids():
+            return
+        """ if source == Catalog """
+        _artist_id = self.hass.states.get(self._artist)
+        if _artist_id is None:
+            _LOGGER.error("(%s) is not a valid input_select entity.", self._artist)
+            return
+        artist = _artist_id.state
+
+        _album_id = self.hass.states.get(self._album)
+        if _album_id is None:
+            _LOGGER.error("(%s) is not a valid input_select entity.", self._album)
+            return
+        album = _album_id.state
+
+        self._tracks = None
+
+        for song in self._songs:    
+            if (song['artist'] == artist) or (artist == "All Artists"):
+                if (song['album'] == album) or (album == "All Albums"):
+                  self._tracks.append(song['id'])
+
+        self._total_tracks = len(self._tracks)
         if self._shuffle and self._shuffle_mode != 2:
             random.shuffle(self._tracks)
         self._play()
@@ -581,6 +691,8 @@ class GmusicComponent(MediaPlayerDevice):
                 self._load_playlist()
             elif source == 'Station':
                 self._load_station()
+            elif source == 'Catalog':
+                self._load_catalog()
             else:
                 _LOGGER.error("Invalid source: (%s)", source)
                 self.turn_off()
