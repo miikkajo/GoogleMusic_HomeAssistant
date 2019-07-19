@@ -182,9 +182,7 @@ class GmusicComponent(MediaPlayerDevice):
         self._next_track_no = 0
 
   #      hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_playlists)
-#        hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_songs)
         hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_catalog)
-        #hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_albums)
         hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_stations)
         track_state_change(hass,self._artist, self._update_albums)
         self._shuffle = config.get(CONF_SHUFFLE, DEFAULT_SHUFFLE)
@@ -422,7 +420,7 @@ class GmusicComponent(MediaPlayerDevice):
         _artist_id = self.hass.states.get(self._artist)
         
         idx = 0
-#        self._album_to_index["All albums"] = idx
+        self._album_to_index["All Albums"] = idx
         for song in self._songs:
           if len(song['album']) < 1:
             song['album'] = "unknown"
@@ -440,7 +438,6 @@ class GmusicComponent(MediaPlayerDevice):
         if new_state == None:
            return 
         self._album_to_index = {}
-        #self._songs = self._api.get_all_songs()
 
         _artist_id = new_state.state
         idx = 0
