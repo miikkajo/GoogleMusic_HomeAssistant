@@ -14,4 +14,4 @@ seems to be somewhat working now:
 3. select Album from artist from input_select.gmusic_player_album
 4. set media_player.gmusic_player = ON
 
-no support whatsoever, just made it public if someone find this intresting and want to push it further
+no support whatsoever, just made it public if someone find this interesting and want to push it further
