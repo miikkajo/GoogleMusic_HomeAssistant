@@ -44,9 +44,7 @@ input_select:
   gmusic_player_speakers:
     name: Speakers
     icon: mdi:speaker
-    options: ## ONLY HERE - Replace with entity_ids of your own media_players
-    - bedroom_stereo
-    - workshop_stereo
+    options: !secret gmusic_speakers
 
   gmusic_player_source:
     name: Source

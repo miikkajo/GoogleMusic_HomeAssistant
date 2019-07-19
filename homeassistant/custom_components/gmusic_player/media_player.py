@@ -522,12 +522,12 @@ class GmusicComponent(MediaPlayerDevice):
             return
         album = _album_id.state
 
-        self._tracks = None
+        self._tracks = []
 
         for song in self._songs:    
             if (song['artist'] == artist) or (artist == "All Artists"):
                 if (song['album'] == album) or (album == "All Albums"):
-                  self._tracks.append(song['id'])
+                  self._tracks.append(song)
 
         self._total_tracks = len(self._tracks)
         if self._shuffle and self._shuffle_mode != 2:
@@ -589,6 +589,8 @@ class GmusicComponent(MediaPlayerDevice):
         """ If source is a playlist, track is inside of track """
         if 'track' in _track:
             _track = _track['track']
+        elif 'id' in _track:
+            track = _track['id']
         """ Find the unique track id. """
         uid = ''
         if 'trackId' in _track:
