@@ -69,7 +69,7 @@ DEFAULT_ARTISTS = 'not_set'
 DEFAULT_ALBUMS = 'not_set'
 DEFAULT_SONGS = 'not_set'
 DEFAULT_STATIONS = 'not_set'
-DEFAULT_SHUFFLE = True
+DEFAULT_SHUFFLE = False
 DEFAULT_SHUFFLE_MODE = 1
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend = vol.Schema({
@@ -395,7 +395,6 @@ class GmusicComponent(MediaPlayerDevice):
 
     def _update_songs(self, now=None):
         """ Sync songs from Google Music library """
-        _LOGGER.error("update_songs")
         self._songs = self._api.get_all_songs()
 
     def _update_catalog(self, now=None):
@@ -441,7 +440,7 @@ class GmusicComponent(MediaPlayerDevice):
 
         _artist_id = new_state.state
         idx = 0
-        self._album_to_index["All albums"] = idx
+        self._album_to_index["All Albums"] = idx
         for song in self._songs:
           if (song['artist'] == _artist_id) or (_artist_id == "All Artists"):
               if len(song['album']) < 1:
@@ -502,30 +501,37 @@ class GmusicComponent(MediaPlayerDevice):
             random.shuffle(self._tracks)
         self._play()
 
-    def _load_catalog(self, playlist=None):
+    def _load_catalog(self, artist=None, album=None):
         """ generate tracks to the track_queue """
         if not self._update_entity_ids():
             return
         """ if source == Catalog """
-        _artist_id = self.hass.states.get(self._artist)
-        if _artist_id is None:
+        if artist is None:
+          _artist_id = self.hass.states.get(self._artist)
+          if _artist_id is None:
             _LOGGER.error("(%s) is not a valid input_select entity.", self._artist)
             return
-        artist = _artist_id.state
+          else:
+            artist = _artist_id.state
 
-        _album_id = self.hass.states.get(self._album)
-        if _album_id is None:
-            _LOGGER.error("(%s) is not a valid input_select entity.", self._album)
-            return
-        album = _album_id.state
+        if album is None:
+            _album_id = self.hass.states.get(self._album)
+            if _album_id is None:
+                _LOGGER.error("(%s) is not a valid input_select entity.", self._album)
+                return
+            else:
+              album = _album_id.state
 
+        #clear playlist
         self._tracks = []
 
+        #search for tracks with corret artist / album
         for song in self._songs:    
             if (song['artist'] == artist) or (artist == "All Artists"):
                 if (song['album'] == album) or (album == "All Albums"):
                   self._tracks.append(song)
 
+        # play tracks
         self._total_tracks = len(self._tracks)
         if self._shuffle and self._shuffle_mode != 2:
             random.shuffle(self._tracks)
@@ -644,37 +650,6 @@ class GmusicComponent(MediaPlayerDevice):
         self.hass.services.call(DOMAIN_MP, SERVICE_PLAY_MEDIA, data)
 
 
-    def play_media(self, media_type, media_id, **kwargs):
-        if not self._update_entity_ids():
-            return
-        _player = self.hass.states.get(self._entity_ids)
-
-        if media_type == "station":
-            _source = {"option":"Station", "entity_id": self._source}
-            _option = {"option": media_id, "entity_id": self._station}
-            self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SELECT_OPTION, _source)
-            self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SELECT_OPTION, _option)
-        elif media_type == "playlist":
-            _source = {"option":"Playlist", "entity_id": self._source}
-            _option = {"option": media_id, "entity_id": self._playlist}
-            self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SELECT_OPTION, _source)
-            self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SELECT_OPTION, _option)
-        else:
-            _LOGGER.error("Invalid: (%s) --> media_types are 'station' or 'playlist'.", media_type)
-            return
-
-        if self._playing == True:
-            self.media_stop()
-            self.media_play()
-        elif self._playing == False and self._state == STATE_OFF:
-            if _player.state == STATE_OFF:
-                self.turn_on()
-            else:
-                data = {ATTR_ENTITY_ID: _player.entity_id}
-                self._turn_off_media_player(data)
-                call_later(self.hass, 1, self.turn_on)
-        else:
-            _LOGGER.error("self._state is: (%s).", self._state)
 
     def media_play(self, entity_id=None, old_state=None, new_state=None, **kwargs):
         """Send play command."""
