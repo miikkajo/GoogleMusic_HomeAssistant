@@ -168,12 +168,8 @@ class GmusicComponent(MediaPlayerDevice):
 
         self._entity_ids = []  ## media_players - aka speakers
         self._playlists = []
-        self._artists = []
-        self._albums = []
-        self._songs = []
+        self._catalog = {}
         self._playlist_to_index = {}
-        self._artist_to_index = {}
-        self._album_to_index = {}
         self._stations = []
         self._station_to_index = {}
         self._tracks = []
@@ -388,72 +384,62 @@ class GmusicComponent(MediaPlayerDevice):
             self._playlist_to_index[name] = idx
 
         playlists = list(self._playlist_to_index.keys())
-        self._attributes['playlists'] = playlists
-
         data = {"options": list(playlists), "entity_id": self._playlist}
         self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SET_OPTIONS, data)
 
-    def _update_songs(self, now=None):
+    def _update_songs(self):
         """ Sync songs from Google Music library """
-        self._songs = self._api.get_all_songs()
 
-    def _update_catalog(self, now=None):
-        """ Sync songs from Google Music library """
         self._songs = self._api.get_all_songs()
-        self._artist_to_index = {}
-        idx = 0
-        self._artist_to_index["All Artists"] = idx
-        for song in self._songs:
-            if len(song['artist']) < 1:
+        self._catalog = {}
+        self._catalog['All Artists'] = None
+
+        for song in songs:    
+            if song['artist'] == "":
                 song['artist'] = "unknown"
-            if song['artist'] not in self._artist_to_index.keys():
-              idx = idx + 1
-              self._artist_to_index[song['artist']] = idx
-        
-        artists = list(self._artist_to_index.keys())
-        self._attributes['artists'] = artists
-        data = {"options": list(artists), "entity_id": self._artist}
+            if song['album'] == "":
+                song['album'] = "unknown"
+            if song['artist'] not in catalog.keys():
+                self._catalog[song['artist']] = []
+                self._catalog[song['artist']]['All Albums'] = []
+            if song['album'] not in self._catalog[song['artist']].keys():
+                self._catalog[song['artist']][song['album']] = {}
+                self._catalog[song['artist']][song['album']]['tracks'] = []
+            self._catalog[song['artist']][song['album']]['tracks'].append(song)
+
+        for artist in catalog.keys():
+            for album in artist.keys():
+                if len(album['tracks']) > 1
+                    sorted(album['tracks'], key=lambda k: k.get('trackNumber',''))
+
+
+    def _update_catalog(self):
+        """ Populate Artist and Album input_select components """
+        self._update_songs()
+        artists.append(sorted(catalog.keys()))
+        # populate artist input_select
+        data = {"options": , "entity_id": self._artist}
         self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SET_OPTIONS, data)
 
-        self._album_to_index = {}
-        _artist_id = self.hass.states.get(self._artist)
-        
-        idx = 0
-        self._album_to_index["All Albums"] = idx
-        for song in self._songs:
-          if len(song['album']) < 1:
-            song['album'] = "unknown"
-          if song['album'] not in self._album_to_index.keys():
-            idx = idx + 1
-            self._album_to_index[song['album']] = idx
-        
-        albums = list(self._album_to_index.keys())
-        self._attributes['albums'] = albums
-        data = {"options": list(albums), "entity_id": self._album}
+        # populate album input_select
+        albums = []
+        for artist in catalog.keys():
+            albums.append(catalog[artist].keys())
+
+        data = {"options": albums, "entity_id": self._album}
         self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SET_OPTIONS, data)
 
     def _update_albums(self, entity_id=None, old_state=None, new_state=None):
         _LOGGER.debug("Selected Artist: %s.", new_state.state)
         if new_state == None:
            return 
-        self._album_to_index = {}
 
-        _artist_id = new_state.state
-        idx = 0
-        self._album_to_index["All Albums"] = idx
-        for song in self._songs:
-          if (song['artist'] == _artist_id) or (_artist_id == "All Artists"):
-              if len(song['album']) < 1:
-                song['album'] = "unknown"
-              if song['album'] not in self._album_to_index.keys():
-                idx = idx + 1
-                self._album_to_index[song['album']] = idx
-        
-        albums = list(self._album_to_index.keys())
-        self._attributes['albums'] = albums
-        data = {"options": list(albums), "entity_id": self._album}
+        artist = new_state.state
+        albums = []
+        albums.append("All Albums")
+        albums.append(sorted(catalog[artist].keys()))
+        data = {"options": albums, "entity_id": self._album}
         self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SET_OPTIONS, data)
-
 
     def _update_stations(self, now=None):
         """ Sync stations from Google Music library """
@@ -501,38 +487,42 @@ class GmusicComponent(MediaPlayerDevice):
             random.shuffle(self._tracks)
         self._play()
 
-    def _load_catalog(self, artist=None, album=None):
+    def _load_catalog(self):
+        """ if source == Catalog """
         """ generate tracks to the track_queue """
         if not self._update_entity_ids():
             return
-        """ if source == Catalog """
-        if artist is None:
-          _artist_id = self.hass.states.get(self._artist)
-          if _artist_id is None:
+
+        _artist = self.hass.states.get(self._artist)
+        if _artist is None:
             _LOGGER.error("(%s) is not a valid input_select entity.", self._artist)
             return
-          else:
+        else:
             artist = _artist_id.state
 
-        if album is None:
-            _album_id = self.hass.states.get(self._album)
-            if _album_id is None:
-                _LOGGER.error("(%s) is not a valid input_select entity.", self._album)
-                return
-            else:
-              album = _album_id.state
+        _album = self.hass.states.get(self._album)
+        if _album is None:
+            _LOGGER.error("(%s) is not a valid input_select entity.", self._album)
+            return
+        else:
+            album = _album.state
 
         #clear playlist
         self._tracks = []
 
         #search for tracks with corret artist / album
-        for song in self._songs:    
-            if (song['artist'] == artist) or (artist == "All Artists"):
-                if (song['album'] == album) or (album == "All Albums"):
-                  self._tracks.append(song)
+        for song in self._catalog[artist][album]['tracks']:
+            self._tracks.append(song)
+
+        self._total_tracks = len(self._tracks)
 
         # play tracks
-        self._total_tracks = len(self._tracks)
+        
+        self._attributes['Queue Length'] = self._total_tracks
+        self._attributes['Queue'] = []
+        for track in self._tracks
+            self._attributes['Queue'].append(track['title'])
+
         if self._shuffle and self._shuffle_mode != 2:
             random.shuffle(self._tracks)
         self._play()
