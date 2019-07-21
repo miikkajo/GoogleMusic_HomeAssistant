@@ -506,7 +506,7 @@ class GmusicComponent(MediaPlayerDevice):
             _LOGGER.error("(%s) is not a valid input_select entity.", self._artist)
             return
         else:
-            artist = _artist_id.state
+            artist = _artist.state
 
         _album = self.hass.states.get(self._album)
         if _album is None:
