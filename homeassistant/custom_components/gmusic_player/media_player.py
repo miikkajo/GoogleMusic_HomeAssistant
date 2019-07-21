@@ -55,6 +55,8 @@ CONF_ALBUMS = 'album'
 CONF_STATIONS = 'station'
 CONF_SHUFFLE = 'shuffle'
 CONF_SHUFFLE_MODE = 'shuffle_mode'
+CONF_QUEUE_SIZE = 'queue_size'
+CONF_QUEUE = 'queue'
 
 DEFAULT_DEVICE_ID = 'not_set'
 DEFAULT_LOGIN_TYPE = 'not_set'
@@ -69,6 +71,8 @@ DEFAULT_ALBUMS = 'not_set'
 DEFAULT_STATIONS = 'not_set'
 DEFAULT_SHUFFLE = False
 DEFAULT_SHUFFLE_MODE = 1
+DEFAULT_QUEUE_SIZE = 0
+DEFAULT_QUEUE = 'not_set'
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend = vol.Schema({
     DOMAIN: vol.Schema({
@@ -84,6 +88,8 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend = vol.Schema({
         vol.Optional(CONF_ARTISTS, default=DEFAULT_ARTISTS): cv.string,
         vol.Optional(CONF_ALBUMS, default=DEFAULT_ALBUMS): cv.string,                
         vol.Optional(CONF_STATIONS, default=DEFAULT_STATIONS): cv.string,
+        vol.Optional(CONF_QUEUE_SIZE, default=DEFAULT_QUEUE_SIZE): cv.string,
+        vol.Optional(CONF_QUEUE, default=DEFAULT_QUEUE): cv.string,
     })
 }, extra=vol.ALLOW_EXTRA)
 
@@ -389,7 +395,6 @@ class GmusicComponent(MediaPlayerDevice):
 
         songs = self._api.get_all_songs()
         self._catalog = {}
-        #self._catalog['All Artists'] = ""
 
         for song in songs:    
             if song['artist'] == "":
@@ -399,7 +404,6 @@ class GmusicComponent(MediaPlayerDevice):
                 
             if song['artist'] not in self._catalog.keys():
                 self._catalog[song['artist']] = {}
-#                self._catalog[song['artist']]['All Albums'] = ""
             if song['album'] not in self._catalog[song['artist']].keys():
                 self._catalog[song['artist']][song['album']] = {}
                 self._catalog[song['artist']][song['album']]['tracks'] = []
@@ -407,7 +411,8 @@ class GmusicComponent(MediaPlayerDevice):
 
         for artist in self._catalog.keys():
             for album in self._catalog[artist].keys():
-                sorted(self._catalog[artist][album]['tracks'], key=lambda k: k.get('trackNumber',''))
+                if len(self._catalog[artist][album]['tracks']) > 1:
+                    self._catalog[artist][album]['tracks'] = sorted(self._catalog[artist][album]['tracks'], key=lambda k: k.get('trackNumber',''))
 
 
     def _update_catalog(self,now=None):
@@ -417,8 +422,6 @@ class GmusicComponent(MediaPlayerDevice):
         artists.append("All Artists")
         for artist in sorted(self._catalog.keys()):
             artists.append(artist)
-        # populate artist input_select
-        _LOGGER.debug("artists: %s.", list(artists))
         data = {"options": list(artists), "entity_id": self._artist}
         self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SET_OPTIONS, data)
 
@@ -427,7 +430,6 @@ class GmusicComponent(MediaPlayerDevice):
         albums.append("All Albums")
         for artist in self._catalog.keys():
             albums.append(self._catalog[artist].keys())
-        
         data = {"options": list(albums), "entity_id": self._album}
         self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SET_OPTIONS, data)
 
@@ -506,30 +508,35 @@ class GmusicComponent(MediaPlayerDevice):
             _LOGGER.error("(%s) is not a valid input_select entity.", self._artist)
             return
         else:
-            artist = _artist.state
+            selected_artist = _artist.state
 
         _album = self.hass.states.get(self._album)
         if _album is None:
             _LOGGER.error("(%s) is not a valid input_select entity.", self._album)
             return
         else:
-            album = _album.state
+            selected_album = _album.state
+
+        _LOGGER.debug("Selected Artist: %s.", selected_artist)
+        _LOGGER.debug("Selected Album: %s.", selected_album)
 
         #clear playlist
         self._tracks = []
 
-        #search for tracks with corret artist / album
-        for song in self._catalog[artist][album]['tracks']:
-            self._tracks.append(song)
+        for artist in self._catalog.keys():
+            if (selected_artist == "All Artists") or (artist == selected_artist):
+                for album in self._catalog[artist].keys():
+                    if (selected_album == "All Albums") or (album == selected_album):
+                        for song in self._catalog[artist][album]['tracks']:
+                            self._tracks.append(song)
 
         self._total_tracks = len(self._tracks)
 
         # play tracks
-        
-        self._attributes['Queue Length'] = self._total_tracks
-        self._attributes['Queue'] = []
+        self._attributes['queue_size'] = self._total_tracks
+        self._attributes['queue'] = []
         for track in self._tracks:
-            self._attributes['Queue'].append(track['title'])
+            self._attributes['queue'].append(track['title'])
 
         if self._shuffle and self._shuffle_mode != 2:
             random.shuffle(self._tracks)
