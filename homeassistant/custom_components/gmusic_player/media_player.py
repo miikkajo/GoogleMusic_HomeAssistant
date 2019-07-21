@@ -52,7 +52,6 @@ CONF_SOURCE = 'source'
 CONF_PLAYLISTS = 'playlist'
 CONF_ARTISTS = 'artist'
 CONF_ALBUMS = 'album'
-CONF_SONGS = 'song'
 CONF_STATIONS = 'station'
 CONF_SHUFFLE = 'shuffle'
 CONF_SHUFFLE_MODE = 'shuffle_mode'
@@ -67,7 +66,6 @@ DEFAULT_SOURCE = 'not_set'
 DEFAULT_PLAYLISTS = 'not_set'
 DEFAULT_ARTISTS = 'not_set'
 DEFAULT_ALBUMS = 'not_set'
-DEFAULT_SONGS = 'not_set'
 DEFAULT_STATIONS = 'not_set'
 DEFAULT_SHUFFLE = False
 DEFAULT_SHUFFLE_MODE = 1
@@ -85,7 +83,6 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend = vol.Schema({
         vol.Optional(CONF_PLAYLISTS, default=DEFAULT_PLAYLISTS): cv.string,
         vol.Optional(CONF_ARTISTS, default=DEFAULT_ARTISTS): cv.string,
         vol.Optional(CONF_ALBUMS, default=DEFAULT_ALBUMS): cv.string,                
-        vol.Optional(CONF_SONGS, default=DEFAULT_SONGS): cv.string,                
         vol.Optional(CONF_STATIONS, default=DEFAULT_STATIONS): cv.string,
     })
 }, extra=vol.ALLOW_EXTRA)
@@ -390,43 +387,48 @@ class GmusicComponent(MediaPlayerDevice):
     def _update_songs(self):
         """ Sync songs from Google Music library """
 
-        self._songs = self._api.get_all_songs()
+        songs = self._api.get_all_songs()
         self._catalog = {}
-        self._catalog['All Artists'] = None
+        #self._catalog['All Artists'] = ""
 
         for song in songs:    
             if song['artist'] == "":
                 song['artist'] = "unknown"
             if song['album'] == "":
                 song['album'] = "unknown"
-            if song['artist'] not in catalog.keys():
-                self._catalog[song['artist']] = []
-                self._catalog[song['artist']]['All Albums'] = []
+                
+            if song['artist'] not in self._catalog.keys():
+                self._catalog[song['artist']] = {}
+#                self._catalog[song['artist']]['All Albums'] = ""
             if song['album'] not in self._catalog[song['artist']].keys():
                 self._catalog[song['artist']][song['album']] = {}
                 self._catalog[song['artist']][song['album']]['tracks'] = []
             self._catalog[song['artist']][song['album']]['tracks'].append(song)
 
-        for artist in catalog.keys():
-            for album in artist.keys():
-                if len(album['tracks']) > 1
-                    sorted(album['tracks'], key=lambda k: k.get('trackNumber',''))
+        for artist in self._catalog.keys():
+            for album in self._catalog[artist].keys():
+                sorted(self._catalog[artist][album]['tracks'], key=lambda k: k.get('trackNumber',''))
 
 
-    def _update_catalog(self):
+    def _update_catalog(self,now=None):
         """ Populate Artist and Album input_select components """
         self._update_songs()
-        artists.append(sorted(catalog.keys()))
+        artists = []
+        artists.append("All Artists")
+        for artist in sorted(self._catalog.keys()):
+            artists.append(artist)
         # populate artist input_select
-        data = {"options": , "entity_id": self._artist}
+        _LOGGER.debug("artists: %s.", list(artists))
+        data = {"options": list(artists), "entity_id": self._artist}
         self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SET_OPTIONS, data)
 
         # populate album input_select
         albums = []
-        for artist in catalog.keys():
-            albums.append(catalog[artist].keys())
-
-        data = {"options": albums, "entity_id": self._album}
+        albums.append("All Albums")
+        for artist in self._catalog.keys():
+            albums.append(self._catalog[artist].keys())
+        
+        data = {"options": list(albums), "entity_id": self._album}
         self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SET_OPTIONS, data)
 
     def _update_albums(self, entity_id=None, old_state=None, new_state=None):
@@ -437,7 +439,13 @@ class GmusicComponent(MediaPlayerDevice):
         artist = new_state.state
         albums = []
         albums.append("All Albums")
-        albums.append(sorted(catalog[artist].keys()))
+        if artist == "All Artists":
+            for artist in sorted(self._catalog.keys()):
+                for album in sorted(self._catalog[artist].keys()):
+                    albums.append(album)
+        else:
+            for album in sorted(self._catalog[artist].keys()):
+                albums.append(album)
         data = {"options": albums, "entity_id": self._album}
         self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SET_OPTIONS, data)
 
@@ -520,7 +528,7 @@ class GmusicComponent(MediaPlayerDevice):
         
         self._attributes['Queue Length'] = self._total_tracks
         self._attributes['Queue'] = []
-        for track in self._tracks
+        for track in self._tracks:
             self._attributes['Queue'].append(track['title'])
 
         if self._shuffle and self._shuffle_mode != 2:
