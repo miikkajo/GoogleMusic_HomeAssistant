@@ -448,7 +448,7 @@ class GmusicComponent(MediaPlayerDevice):
         else:
             for album in sorted(self._catalog[artist].keys()):
                 albums.append(album)
-        data = {"options": albums, "entity_id": self._album}
+        data = {"options": list(albums), "entity_id": self._album}
         self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SET_OPTIONS, data)
 
     def _update_stations(self, now=None):
