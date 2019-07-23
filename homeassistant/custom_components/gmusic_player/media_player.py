@@ -31,7 +31,7 @@ from homeassistant.components.media_player.const import (
     MEDIA_TYPE_MUSIC, SUPPORT_STOP, SUPPORT_PLAY, SUPPORT_PAUSE,
     SUPPORT_PLAY_MEDIA, SUPPORT_PREVIOUS_TRACK, SUPPORT_NEXT_TRACK,
     SUPPORT_VOLUME_MUTE, SUPPORT_VOLUME_SET, SUPPORT_VOLUME_STEP,
-    SUPPORT_TURN_ON, SUPPORT_TURN_OFF, SUPPORT_SHUFFLE_SET, SUPPORT_SELECT_SOURCE)
+    SUPPORT_TURN_ON, SUPPORT_TURN_OFF, SUPPORT_SELECT_SOURCE)
 
 # The domain of your component. Should be equal to the name of your component.
 DOMAIN = 'gmusic_player'
@@ -39,7 +39,7 @@ DOMAIN = 'gmusic_player'
 SUPPORT_GMUSIC_PLAYER = SUPPORT_TURN_ON | SUPPORT_TURN_OFF | SUPPORT_PLAY_MEDIA | \
     SUPPORT_PLAY | SUPPORT_PAUSE | SUPPORT_STOP | SUPPORT_SELECT_SOURCE | \
     SUPPORT_VOLUME_SET | SUPPORT_VOLUME_STEP | SUPPORT_VOLUME_MUTE | \
-    SUPPORT_PREVIOUS_TRACK | SUPPORT_NEXT_TRACK | SUPPORT_SHUFFLE_SET
+    SUPPORT_PREVIOUS_TRACK | SUPPORT_NEXT_TRACK
 
 CONF_USERNAME = 'user'
 CONF_DEVICE_ID = 'device_id'
@@ -53,10 +53,9 @@ CONF_PLAYLISTS = 'playlist'
 CONF_ARTISTS = 'artist'
 CONF_ALBUMS = 'album'
 CONF_STATIONS = 'station'
-CONF_SHUFFLE = 'shuffle'
-CONF_SHUFFLE_MODE = 'shuffle_mode'
 CONF_QUEUE_SIZE = 'queue_size'
 CONF_QUEUE = 'queue'
+CONF_PLAY_MODE = 'play_mode'
 
 DEFAULT_DEVICE_ID = 'not_set'
 DEFAULT_LOGIN_TYPE = 'not_set'
@@ -69,10 +68,9 @@ DEFAULT_PLAYLISTS = 'not_set'
 DEFAULT_ARTISTS = 'not_set'
 DEFAULT_ALBUMS = 'not_set'
 DEFAULT_STATIONS = 'not_set'
-DEFAULT_SHUFFLE = False
-DEFAULT_SHUFFLE_MODE = 1
 DEFAULT_QUEUE_SIZE = 0
 DEFAULT_QUEUE = 'not_set'
+DEFAULT_PLAY_MODE = 'Normal'
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend = vol.Schema({
     DOMAIN: vol.Schema({
@@ -90,6 +88,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend = vol.Schema({
         vol.Optional(CONF_STATIONS, default=DEFAULT_STATIONS): cv.string,
         vol.Optional(CONF_QUEUE_SIZE, default=DEFAULT_QUEUE_SIZE): cv.string,
         vol.Optional(CONF_QUEUE, default=DEFAULT_QUEUE): cv.string,
+        vol.Optional(CONF_PLAY_MODE, default=DEFAULT_PLAY_MODE): cv.string,
     })
 }, extra=vol.ALLOW_EXTRA)
 
@@ -168,6 +167,7 @@ class GmusicComponent(MediaPlayerDevice):
         self._media_player = "input_select." + config.get(CONF_SPEAKERS, DEFAULT_SPEAKERS)
         self._station = "input_select." + config.get(CONF_STATIONS, DEFAULT_STATIONS)
         self._source = "input_select." + config.get(CONF_SOURCE, DEFAULT_SOURCE)
+        self._play_mode = "input_select." + config.get(CONF_PLAY_MODE, DEFAULT_PLAY_MODE)
 
         self._entity_ids = []  ## media_players - aka speakers
         self._playlists = []
@@ -184,8 +184,7 @@ class GmusicComponent(MediaPlayerDevice):
         hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_catalog)
         hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_stations)
         track_state_change(hass,self._artist, self._update_albums)
-        self._shuffle = config.get(CONF_SHUFFLE, DEFAULT_SHUFFLE)
-        self._shuffle_mode = config.get(CONF_SHUFFLE_MODE, DEFAULT_SHUFFLE_MODE)
+        
 
         self._unsub_tracker = None
         self._playing = False
@@ -270,15 +269,9 @@ class GmusicComponent(MediaPlayerDevice):
         return True
 
     @property
-    def shuffle(self):
-        """Boolean if shuffling is enabled."""
-        return self._shuffle
-
-    @property
     def volume_level(self):
       """Volume level of the media player (0..1)."""
       return self._volume
-
 
     def turn_on(self, *args, **kwargs):
         """ Turn on the selected media_player from input_select """
@@ -428,8 +421,10 @@ class GmusicComponent(MediaPlayerDevice):
         # populate album input_select
         albums = []
         albums.append("All Albums")
-        for artist in self._catalog.keys():
-            albums.append(self._catalog[artist].keys())
+        for artist in sorted(self._catalog.keys()):
+            for album in sorted(self._catalog[artist].keys()):
+                albums.append(album)
+            
         data = {"options": list(albums), "entity_id": self._album}
         self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SET_OPTIONS, data)
 
@@ -492,8 +487,11 @@ class GmusicComponent(MediaPlayerDevice):
         self._tracks = None
         self._tracks = self._playlists[idx]['tracks']
         self._total_tracks = len(self._tracks)
-        #self.log("Loading [{}] Tracks From: {}".format(len(self._tracks), _playlist_id))
-        if self._shuffle and self._shuffle_mode != 2:
+
+        _play_mode = self.hass.states.get(self._play_mode)
+        play_mode = _play_mode.state
+        self._attributes['play_mode'] = play_mode
+        if (play_mode == 'Shuffle') or (play_mode == 'Shuffle Random'):
             random.shuffle(self._tracks)
         self._play()
 
@@ -533,13 +531,18 @@ class GmusicComponent(MediaPlayerDevice):
         self._total_tracks = len(self._tracks)
 
         # play tracks
+
+        _play_mode = self.hass.states.get(self._play_mode)
+        play_mode = _play_mode.state
+        self._attributes['play_mode'] = play_mode
+        if (play_mode == 'Shuffle') or (play_mode == 'Shuffle Random'):
+            random.shuffle(self._tracks)
+            
         self._attributes['queue_size'] = self._total_tracks
         self._attributes['queue'] = []
         for track in self._tracks:
             self._attributes['queue'].append(track['title'])
 
-        if self._shuffle and self._shuffle_mode != 2:
-            random.shuffle(self._tracks)
         self._play()
 
 
@@ -577,7 +580,11 @@ class GmusicComponent(MediaPlayerDevice):
     def _get_track(self, entity_id=None, old_state=None, new_state=None, retry=3):
         """ Get a track and play it from the track_queue. """
         _track = None
-        if self._shuffle and self._shuffle_mode != 1:
+        _play_mode = self.hass.states.get(self._play_mode)
+        play_mode = _play_mode.state
+        self._attributes['play_mode'] = play_mode
+
+        if (play_mode == 'Shuffle Random') or (play_mode == 'Random'):
             self._next_track_no = random.randrange(self._total_tracks) - 1
         else:
             self._next_track_no = self._next_track_no + 1
@@ -713,18 +720,6 @@ class GmusicComponent(MediaPlayerDevice):
         self.schedule_update_ha_state()
         data = {ATTR_ENTITY_ID: self._entity_ids}
         self.hass.services.call(DOMAIN_MP, 'media_stop', data)
-
-    def set_shuffle(self, shuffle):
-        self._shuffle = shuffle
-        if self._shuffle_mode == 1:
-            self._attributes['shuffle_mode'] = 'Shuffle'
-        elif self._shuffle_mode == 2:
-            self._attributes['shuffle_mode'] = 'Random'
-        elif self._shuffle_mode == 3:
-            self._attributes['shuffle_mode'] = 'Shuffle Random'
-        else:
-            self._attributes['shuffle_mode'] = self._shuffle_mode
-        return self.schedule_update_ha_state()
 
     def set_volume_level(self, volume):
         """Set volume level."""

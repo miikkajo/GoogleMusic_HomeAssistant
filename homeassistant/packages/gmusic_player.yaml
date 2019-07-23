@@ -36,6 +36,7 @@ media_player:
     artist: 'gmusic_player_artist'
     album: 'gmusic_player_album'
     station: 'gmusic_player_station'
+    play_mode: 'gmusic_player_play_mode'
 
 ## Various input_select REQUIRED by gmusic_player
 ## PLEASE DO NOT REMOVE OR CHANGE THESE (Not Yet!)
@@ -45,6 +46,15 @@ input_select:
     name: Speakers
     icon: mdi:speaker
     options: !secret gmusic_speakers
+
+  gmusic_player_play_mode:
+    name: Play mode
+    icon: mdi:shuffle-variant
+    options:
+    - "Normal"
+    - "Shuffle"
+    - "Random"
+    - "Shuffle Random"
 
   gmusic_player_source:
     name: Source
@@ -56,13 +66,13 @@ input_select:
 
   gmusic_player_artist:
     name: Artist
-    icon: mdi:playlist-music
+    icon: mdi:music
     options: ## Should be empty
     - " "    
 
   gmusic_player_album:
     name: Album
-    icon: mdi:playlist-music
+    icon: mdi:album
     options: ## Should be empty
     - " "    
     
@@ -84,43 +94,7 @@ sensor:
     sensors:
       gmusic_receiver:
         value_template: "{{ states.media_player.gmusic_player.attributes._player_state }}"
-
-automation old:
-  - alias: "gmusic_player_auto_advance"
-    hide_entity: true
-    initial_state: 'on'
-    trigger:
-      platform: state
-      #value_template: "{{ states.media_player.gmusic_player.attributes._player_state }}"
-      entity_id: 'sensor.gmusic_receiver'
-      from: 'playing'
-      to: 'idle'
-      for:
-        seconds: 1
-    condition:
-      - condition: state
-        entity_id: 'media_player.gmusic_player'
-        state: 'playing'
-    action:
-      - service: media_player.media_next_track
-        entity_id: 'media_player.gmusic_player'
-
-  - alias: "gmusic_player_auto_play"
-    hide_entity: true
-    initial_state: 'on'
-    trigger:
-      platform: state
-      entity_id: 'media_player.gmusic_player'
-      from: 'off'
-      to: 'idle'
-    action:
-      - service: media_player.media_play
-        entity_id: 'media_player.gmusic_player'
-
-
-## ------------------------------------------------------------------------- ,
-##  --------------   The rest of this file is optional    ----------------
-## ------------------------------------------------------------------------- ,
+        
 homeassistant:
   customize:
     media_player.gmusic_player:
@@ -139,6 +113,7 @@ group:
     - media_player.gmusic_player
     - input_select.gmusic_player_speakers
     - input_select.gmusic_player_source
+    - input_select.gmusic_player_play_mode    
     - input_select.gmusic_player_playlist
     - input_select.gmusic_player_artist    
     - input_select.gmusic_player_album
