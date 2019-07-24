@@ -63,7 +63,7 @@ DEFAULT_PASSWORD = 'not_set'
 DEFAULT_TOKEN_PATH = "./."
 DEFAULT_OAUTH_CRED = 'not_set'
 DEFAULT_SPEAKERS = 'not_set'
-DEFAULT_SOURCE = 'not_set'
+DEFAULT_SOURCE = 'Library'
 DEFAULT_PLAYLISTS = 'not_set'
 DEFAULT_ARTISTS = 'not_set'
 DEFAULT_ALBUMS = 'not_set'
@@ -171,7 +171,7 @@ class GmusicComponent(MediaPlayerDevice):
 
         self._entity_ids = []  ## media_players - aka speakers
         self._playlists = []
-        self._catalog = {}
+        self._library = {}
         self._playlist_to_index = {}
         self._stations = []
         self._station_to_index = {}
@@ -180,8 +180,8 @@ class GmusicComponent(MediaPlayerDevice):
         self._attributes = {}
         self._next_track_no = 0
 
-  #      hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_playlists)
-        hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_catalog)
+        hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_playlists)
+        hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_library)
         hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_stations)
         track_state_change(hass,self._artist, self._update_albums)
         
@@ -387,7 +387,7 @@ class GmusicComponent(MediaPlayerDevice):
         """ Sync songs from Google Music library """
 
         songs = self._api.get_all_songs()
-        self._catalog = {}
+        self._library = {}
 
         for song in songs:    
             if song['artist'] == "":
@@ -395,25 +395,25 @@ class GmusicComponent(MediaPlayerDevice):
             if song['album'] == "":
                 song['album'] = "unknown"
                 
-            if song['artist'] not in self._catalog.keys():
-                self._catalog[song['artist']] = {}
-            if song['album'] not in self._catalog[song['artist']].keys():
-                self._catalog[song['artist']][song['album']] = {}
-                self._catalog[song['artist']][song['album']]['tracks'] = []
-            self._catalog[song['artist']][song['album']]['tracks'].append(song)
+            if song['artist'] not in self._library.keys():
+                self._library[song['artist']] = {}
+            if song['album'] not in self._library[song['artist']].keys():
+                self._library[song['artist']][song['album']] = {}
+                self._library[song['artist']][song['album']]['tracks'] = []
+            self._library[song['artist']][song['album']]['tracks'].append(song)
 
-        for artist in self._catalog.keys():
-            for album in self._catalog[artist].keys():
-                if len(self._catalog[artist][album]['tracks']) > 1:
-                    self._catalog[artist][album]['tracks'] = sorted(self._catalog[artist][album]['tracks'], key=lambda k: k.get('trackNumber',''))
+        for artist in self._library.keys():
+            for album in self._library[artist].keys():
+                if len(self._library[artist][album]['tracks']) > 1:
+                    self._library[artist][album]['tracks'] = sorted(self._library[artist][album]['tracks'], key=lambda k: k.get('trackNumber',''))
 
 
-    def _update_catalog(self,now=None):
+    def _update_library(self,now=None):
         """ Populate Artist and Album input_select components """
         self._update_songs()
         artists = []
         artists.append("All Artists")
-        for artist in sorted(self._catalog.keys()):
+        for artist in sorted(self._library.keys()):
             artists.append(artist)
         data = {"options": list(artists), "entity_id": self._artist}
         self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SET_OPTIONS, data)
@@ -421,8 +421,8 @@ class GmusicComponent(MediaPlayerDevice):
         # populate album input_select
         albums = []
         albums.append("All Albums")
-        for artist in sorted(self._catalog.keys()):
-            for album in sorted(self._catalog[artist].keys()):
+        for artist in sorted(self._library.keys()):
+            for album in sorted(self._library[artist].keys()):
                 albums.append(album)
             
         data = {"options": list(albums), "entity_id": self._album}
@@ -437,11 +437,11 @@ class GmusicComponent(MediaPlayerDevice):
         albums = []
         albums.append("All Albums")
         if artist == "All Artists":
-            for artist in sorted(self._catalog.keys()):
-                for album in sorted(self._catalog[artist].keys()):
+            for artist in sorted(self._library.keys()):
+                for album in sorted(self._library[artist].keys()):
                     albums.append(album)
         else:
-            for album in sorted(self._catalog[artist].keys()):
+            for album in sorted(self._library[artist].keys()):
                 albums.append(album)
         data = {"options": list(albums), "entity_id": self._album}
         self.hass.services.call(input_select.DOMAIN, input_select.SERVICE_SET_OPTIONS, data)
@@ -495,8 +495,8 @@ class GmusicComponent(MediaPlayerDevice):
             random.shuffle(self._tracks)
         self._play()
 
-    def _load_catalog(self):
-        """ if source == Catalog """
+    def _load_library(self):
+        """ if source == library """
         """ generate tracks to the track_queue """
         if not self._update_entity_ids():
             return
@@ -521,11 +521,11 @@ class GmusicComponent(MediaPlayerDevice):
         #clear playlist
         self._tracks = []
 
-        for artist in self._catalog.keys():
+        for artist in self._library.keys():
             if (selected_artist == "All Artists") or (artist == selected_artist):
-                for album in self._catalog[artist].keys():
+                for album in self._library[artist].keys():
                     if (selected_album == "All Albums") or (album == selected_album):
-                        for song in self._catalog[artist][album]['tracks']:
+                        for song in self._library[artist][album]['tracks']:
                             self._tracks.append(song)
 
         self._total_tracks = len(self._tracks)
@@ -677,8 +677,8 @@ class GmusicComponent(MediaPlayerDevice):
                 self._load_playlist()
             elif source == 'Station':
                 self._load_station()
-            elif source == 'Catalog':
-                self._load_catalog()
+            elif source == 'Library':
+                self._load_library()
             else:
                 _LOGGER.error("Invalid source: (%s)", source)
                 self.turn_off()
