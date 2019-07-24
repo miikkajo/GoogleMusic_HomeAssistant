@@ -62,7 +62,7 @@ input_select:
     options:
     - "Playlist"
     - "Station"
-    - "Catalog"
+    - "Library"
 
   gmusic_player_artist:
     name: Artist
