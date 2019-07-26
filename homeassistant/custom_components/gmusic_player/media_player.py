@@ -168,7 +168,7 @@ class GmusicComponent(MediaPlayerDevice):
         self._station = "input_select." + config.get(CONF_STATIONS, DEFAULT_STATIONS)
         self._source = "input_select." + config.get(CONF_SOURCE, DEFAULT_SOURCE)
         self._play_mode = "input_select." + config.get(CONF_PLAY_MODE, DEFAULT_PLAY_MODE)
-
+        self._songs = {}
         self._entity_ids = []  ## media_players - aka speakers
         self._playlists = []
         self._library = {}
@@ -179,13 +179,8 @@ class GmusicComponent(MediaPlayerDevice):
         self._track = []
         self._attributes = {}
         self._next_track_no = 0
-
-        hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_playlists)
-        hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_library)
-        hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_stations)
+        hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_sources)
         track_state_change(hass,self._artist, self._update_albums)
-        
-
         self._unsub_tracker = None
         self._playing = False
         self._state = STATE_OFF
@@ -366,6 +361,12 @@ class GmusicComponent(MediaPlayerDevice):
 
         self.schedule_update_ha_state()
 
+    def _update_sources(self, now=None):
+        _LOGGER.debug("Load source lists")
+        self._update_songs()
+        self._update_library()
+        self._update_stations()
+        self._update_playlists()
 
     def _update_playlists(self, now=None):
         """ Sync playlists from Google Music library """
@@ -388,8 +389,10 @@ class GmusicComponent(MediaPlayerDevice):
 
         songs = self._api.get_all_songs()
         self._library = {}
+        self._songs = {}
 
-        for song in songs:    
+        for song in songs:
+            self._songs[song['id']] = song    
             if song['artist'] == "":
                 song['artist'] = "unknown"
             if song['album'] == "":
@@ -410,7 +413,7 @@ class GmusicComponent(MediaPlayerDevice):
 
     def _update_library(self,now=None):
         """ Populate Artist and Album input_select components """
-        self._update_songs()
+        
         artists = []
         artists.append("All Artists")
         for artist in sorted(self._library.keys()):
@@ -470,6 +473,7 @@ class GmusicComponent(MediaPlayerDevice):
 
     def _load_playlist(self, playlist=None):
         """ Load selected playlist to the track_queue """
+        _LOGGER.debug("Load playlist")
         if not self._update_entity_ids():
             return
         """ if source == Playlist """
@@ -484,8 +488,9 @@ class GmusicComponent(MediaPlayerDevice):
             _LOGGER.error("playlist to index is none!")
             self._turn_off_media_player()
             return
-        self._tracks = None
-        self._tracks = self._playlists[idx]['tracks']
+        self._tracks = []
+        for track in self._playlists[idx]['tracks']:
+            self._tracks.append(self._songs[track['trackId']])
         self._total_tracks = len(self._tracks)
 
         _play_mode = self.hass.states.get(self._play_mode)
@@ -493,6 +498,11 @@ class GmusicComponent(MediaPlayerDevice):
         self._attributes['play_mode'] = play_mode
         if (play_mode == 'Shuffle') or (play_mode == 'Shuffle Random'):
             random.shuffle(self._tracks)
+
+        self._attributes['queue_size'] = self._total_tracks
+        self._attributes['queue'] = []
+        for track in self._tracks:
+            self._attributes['queue'].append(track['title'])
         self._play()
 
     def _load_library(self):
@@ -673,6 +683,7 @@ class GmusicComponent(MediaPlayerDevice):
         else:
             _source = self.hass.states.get(self._source)
             source = _source.state
+            _LOGGER.debug("Source: %s",source)
             if source == 'Playlist':
                 self._load_playlist()
             elif source == 'Station':
