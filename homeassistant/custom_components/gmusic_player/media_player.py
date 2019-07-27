@@ -176,8 +176,8 @@ class GmusicComponent(MediaPlayerDevice):
         self._station_to_index = {}
         self._tracks = []
         self._track = []
+        self._track_index = -1
         self._attributes = {}
-        self._next_track_no = 0
         hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_sources)
         track_state_change(hass,self._artist, self._update_albums)
                
@@ -331,13 +331,16 @@ class GmusicComponent(MediaPlayerDevice):
 
     def _sync_player(self, entity_id=None, old_state=None, new_state=None):
         """ Perform actions based on the state of the selected media_player """
+        if not self._playing:
+            return 
+
         # self._unsub_tracker = track_state_change(self.hass, self._entity_ids, self._sync_player)
         if old_state.state == 'playing' and new_state.state == 'idle':
             _LOGGER.debug("send play")
-            self._play()
-
-        if not self._playing:
+            self.media_next_track()
             return
+
+        _LOGGER.debug("entity_ids: %s",self._entity_ids)
         _player = self.hass.states.get(self._entity_ids)
 
         """ full state of device _player, include attributes. """
@@ -588,30 +591,31 @@ class GmusicComponent(MediaPlayerDevice):
 
     def _play(self):
         self._playing = True
-        self._next_track_no = -1
+        self._track_index = 0
         self._get_track()
 
-    def _get_track(self, entity_id=None, old_state=None, new_state=None, retry=3):
+    def _get_track(self,retry=3):
         """ Get a track and play it from the track_queue. """
         _LOGGER.debug("get track")
-        _track = None
+        
         _play_mode = self.hass.states.get(self._play_mode)
         play_mode = _play_mode.state
         self._attributes['play_mode'] = play_mode
 
-        if (play_mode == 'Shuffle Random') or (play_mode == 'Random'):
-            self._next_track_no = random.randrange(self._total_tracks) - 1
-        else:
-            self._next_track_no = self._next_track_no + 1
-            if self._next_track_no >= self._total_tracks:
-                self._next_track_no = 0         ## Restart curent playlist (Loop)
-                #random.shuffle(self._tracks)    ## (re)Shuffle on Loop
+        if ((play_mode == 'Shuffle Random') or (play_mode == 'Random')):
+            self._track_index = random.randrange(len(self._tracks))
+            #random.shuffle(self._tracks)    ## (re)Shuffle on Loop
+
+        _LOGGER.debug("Next track: index %s, title '%s'",self._track_index,self._tracks[self._track_index]['title'])
+
+        _track = None
         try:
-            _track = self._tracks[self._next_track_no]
+            _track = self._tracks[self._track_index]
         except IndexError:
             _LOGGER.error("Out of range! Number of tracks in track_queue == (%s)", self._total_tracks)
             self._turn_off_media_player()
             return
+
         if _track is None:
             _LOGGER.error("_track is None!")
             self._turn_off_media_player()
@@ -624,10 +628,19 @@ class GmusicComponent(MediaPlayerDevice):
             uid = _track['storeId']
         else:
             _LOGGER.error("Failed to get ID for track: (%s)", _track)
+            self._turn_off_media_player()
+
+        """ Get the stream URL and play on media_player """
+        try:
+            _url = self._api.get_stream_url(uid)
+            self._state = STATE_PLAYING
+        except Exception as err:
+            _LOGGER.error("Failed to get URL for track: (%s)", _track)
             if retry < 1:
                 self._turn_off_media_player()
                 return
-            return self._get_track(retry=retry-1)
+            else:
+                return self._get_track(retry=retry-1)
 
         """ If available, get track information. """
         if 'title' in _track:
@@ -653,17 +666,6 @@ class GmusicComponent(MediaPlayerDevice):
         else:
             self._track_artist_cover = None
 
-        """ Get the stream URL and play on media_player """
-        try:
-            _url = self._api.get_stream_url(uid)
-#            self._state = STATE_PLAYING
-        except Exception as err:
-            _LOGGER.error("Failed to get URL for track: (%s)", _track)
-            if retry < 1:
-                self._turn_off_media_player()
-                return
-            return self._get_track(retry=retry-1)
-
         self.schedule_update_ha_state()
         data = {
             ATTR_MEDIA_CONTENT_ID: _url,
@@ -671,8 +673,8 @@ class GmusicComponent(MediaPlayerDevice):
             ATTR_ENTITY_ID: self._entity_ids
             }
         self.hass.services.call(DOMAIN_MP, SERVICE_PLAY_MEDIA, data)
-
-
+        time.sleep(1)
+        self._playing = True
 
     def media_play(self, entity_id=None, old_state=None, new_state=None, **kwargs):
         _LOGGER.debug("media_play")
@@ -714,19 +716,22 @@ class GmusicComponent(MediaPlayerDevice):
 
     def media_previous_track(self, **kwargs):
         """Send the previous track command."""
+        self._track_index = max(self._track_index -2, -1)
         if self._playing:
-            self._next_track_no = max(self._next_track_no - 2, -1)
+            self._playing = False
             self._get_track()
 
     def media_next_track(self, **kwargs):
         """Send next track command."""
+        self._track_index = min(self._track_index +1, len(self._tracks))
         if self._playing:
+            self._playing = False
             self._get_track()
 
     def media_stop(self, **kwargs):
         """Send stop command."""
-        self._state = STATE_IDLE
         self._playing = False
+        self._state = STATE_IDLE
         self._track_artist = None
         self._track_album_name = None
         self._track_name = None
