@@ -181,6 +181,7 @@ class GmusicComponent(MediaPlayerDevice):
         self._next_track_no = 0
         hass.bus.listen_once(EVENT_HOMEASSISTANT_START, self._update_sources)
         track_state_change(hass,self._artist, self._update_albums)
+               
         self._unsub_tracker = None
         self._playing = False
         self._state = STATE_OFF
@@ -332,6 +333,10 @@ class GmusicComponent(MediaPlayerDevice):
     def _sync_player(self, entity_id=None, old_state=None, new_state=None):
         """ Perform actions based on the state of the selected media_player """
         # self._unsub_tracker = track_state_change(self.hass, self._entity_ids, self._sync_player)
+        if old_state.state == 'playing' and new_state.state == 'idle':
+            _LOGGER.debug("auto advance")
+            self._play()
+
         if not self._playing:
             return
         _player = self.hass.states.get(self._entity_ids)
