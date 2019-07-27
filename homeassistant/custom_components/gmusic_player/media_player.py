@@ -7,9 +7,6 @@ import time
 import random
 import pickle
 import os.path
-from datetime import *
-from dateutil.relativedelta import *
-import pytz
 
 import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
@@ -338,13 +335,6 @@ class GmusicComponent(MediaPlayerDevice):
         if old_state.state == 'playing' and new_state.state == 'idle':
             _LOGGER.debug("send play")
             self._play()
-#            _LOGGER.debug("State changed from playing to idle")
-#            changed_at = new_state.last_updated
-#            now = datetime.now(pytz.utc)
-#            rel = relativedelta(changed_at,now)
-#            if rel.seconds > 1:
-
-                
 
         if not self._playing:
             return
