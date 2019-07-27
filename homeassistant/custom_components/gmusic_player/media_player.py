@@ -7,7 +7,9 @@ import time
 import random
 import pickle
 import os.path
-from datetime import timedelta
+from datetime import *
+from dateutil.relativedelta import *
+import pytz
 
 import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
@@ -334,8 +336,15 @@ class GmusicComponent(MediaPlayerDevice):
         """ Perform actions based on the state of the selected media_player """
         # self._unsub_tracker = track_state_change(self.hass, self._entity_ids, self._sync_player)
         if old_state.state == 'playing' and new_state.state == 'idle':
-            _LOGGER.debug("auto advance")
+            _LOGGER.debug("send play")
             self._play()
+#            _LOGGER.debug("State changed from playing to idle")
+#            changed_at = new_state.last_updated
+#            now = datetime.now(pytz.utc)
+#            rel = relativedelta(changed_at,now)
+#            if rel.seconds > 1:
+
+                
 
         if not self._playing:
             return
@@ -594,6 +603,7 @@ class GmusicComponent(MediaPlayerDevice):
 
     def _get_track(self, entity_id=None, old_state=None, new_state=None, retry=3):
         """ Get a track and play it from the track_queue. """
+        _LOGGER.debug("get track")
         _track = None
         _play_mode = self.hass.states.get(self._play_mode)
         play_mode = _play_mode.state
@@ -616,25 +626,19 @@ class GmusicComponent(MediaPlayerDevice):
             _LOGGER.error("_track is None!")
             self._turn_off_media_player()
             return
-        """ If source is a playlist, track is inside of track """
-        if 'track' in _track:
-            _track = _track['track']
-        elif 'id' in _track:
-            track = _track['id']
-        """ Find the unique track id. """
+
         uid = ''
-        if 'trackId' in _track:
-            uid = _track['trackId']
+        if 'id' in _track:
+            uid = _track['id']
         elif 'storeId' in _track:
             uid = _track['storeId']
-        elif 'id' in _track:
-            uid = _track['id']
         else:
             _LOGGER.error("Failed to get ID for track: (%s)", _track)
             if retry < 1:
                 self._turn_off_media_player()
                 return
             return self._get_track(retry=retry-1)
+
         """ If available, get track information. """
         if 'title' in _track:
             self._track_name = _track['title']
@@ -658,16 +662,18 @@ class GmusicComponent(MediaPlayerDevice):
             self._track_artist_cover = _artist_art_ref[0]['url']
         else:
             self._track_artist_cover = None
+
         """ Get the stream URL and play on media_player """
         try:
             _url = self._api.get_stream_url(uid)
+#            self._state = STATE_PLAYING
         except Exception as err:
-            _LOGGER.error("Failed to get URL for track: (%s)", uid)
+            _LOGGER.error("Failed to get URL for track: (%s)", _track)
             if retry < 1:
                 self._turn_off_media_player()
                 return
             return self._get_track(retry=retry-1)
-        self._state = STATE_PLAYING
+
         self.schedule_update_ha_state()
         data = {
             ATTR_MEDIA_CONTENT_ID: _url,
@@ -679,6 +685,8 @@ class GmusicComponent(MediaPlayerDevice):
 
 
     def media_play(self, entity_id=None, old_state=None, new_state=None, **kwargs):
+        _LOGGER.debug("media_play")
+        self._state = STATE_PLAYING
         """Send play command."""
         if self._state == STATE_PAUSED:
             self._state = STATE_PLAYING
