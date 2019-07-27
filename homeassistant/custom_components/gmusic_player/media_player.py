@@ -716,7 +716,7 @@ class GmusicComponent(MediaPlayerDevice):
 
     def media_previous_track(self, **kwargs):
         """Send the previous track command."""
-        self._track_index = max(self._track_index -2, -1)
+        self._track_index = max(self._track_index -2, 0)
         if self._playing:
             self._playing = False
             self._get_track()
