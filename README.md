@@ -11,11 +11,14 @@ now i can loop thrue all songs in my library and not be limited with restriction
 
 seems to be somewhat working now:
 
-1. set input_select.gmusic_player_source = Catalog
+1. set input_select.gmusic_player_source = Library
 2. select play mode from input_select.gmusic_player_play_mode (normal,shuffle,random,shuffle random)  
 2. select Artist from input_select.gmusic_player_artist
 3. select Album from artist from input_select.gmusic_player_album
 4. set media_player.gmusic_player = ON
 5. set media_player.gmusic_player = Play
+
+random can be turned on instantly, if shuffle wanted you have to do turn off -> turn on 
+to generate new track queue
 
 no support whatsoever, just made it public if someone find this interesting and want to push it further
