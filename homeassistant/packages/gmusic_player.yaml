@@ -88,21 +88,10 @@ input_select:
     options:  ## Should be empty
     - " "
 
-## Sensor used for auto track advance.
-sensor:
-  - platform: template
-    sensors:
-      gmusic_receiver:
-        value_template: "{{ states.media_player.gmusic_player.attributes._player_state }}"
-        
 homeassistant:
   customize:
     media_player.gmusic_player:
       friendly_name: "Google Music Player"
-
-    sensor.gmusic_receiver:
-      friendly_name: "Google Music Receiver"
-      hidden: true
 
 ## This group may only be visable when using the "states UI"
 group:
